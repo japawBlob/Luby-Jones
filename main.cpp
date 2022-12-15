@@ -2,6 +2,10 @@
 #include <vector>
 #include <cstdlib>
 #include <atomic>
+#include <omp.h>
+#include <chrono>
+
+std::string colors [] =  {"blue", "red", "green", "yellow", "lightblue", "purple", "orange", "violet"};
 
 struct node {
     unsigned name;
@@ -15,7 +19,25 @@ struct node {
     void print_n() const {
         std::cout << "name: " << name << "\nrand: "<< random_id << "\ncolour: " << colour << "\n\n";
     }
+    std::string to_string () const {
+        std::string s = std::to_string(this->name);
+        s += " [style=\"filled\", color=\"";
+        s += colors[this->colour] + "\"]\n";
+        s += std::to_string(this->name) + " -- {";
+        for (const auto& n : this->neighbours){
+            s += std::to_string(n) + " ";
+        }
+        s += "}\n\n";
+
+        return s;
+    }
 };
+
+
+template <typename TimePoint>
+std::chrono::milliseconds to_ms(TimePoint tp) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(tp);
+}
 
 int main() {
     unsigned number_of_nodes, number_of_connections, i;
@@ -33,6 +55,7 @@ int main() {
         nodes[from].neighbours.push_back(to);
         nodes[to].neighbours.push_back(from);
     }
+    auto start = std::chrono::high_resolution_clock::now();
     std::atomic<unsigned> number_of_coloured_nodes(0);
     unsigned colour = 1;
     while (number_of_coloured_nodes < number_of_nodes){
@@ -60,8 +83,12 @@ int main() {
         }
         colour++;
     }
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cout << "Needed " << to_ms(end - start).count() << " ms to finish.\n";
     for (const auto& n : nodes) {
-        n.print_n();
+        std::cout << n.to_string();
     }
+
+
     return 0;
 }
