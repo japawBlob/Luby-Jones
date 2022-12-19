@@ -33,6 +33,10 @@ struct node {
     }
 };
 
+struct graph {
+    std::vector<node> nodes;
+};
+
 
 template <typename TimePoint>
 std::chrono::milliseconds to_ms(TimePoint tp) {
@@ -40,8 +44,8 @@ std::chrono::milliseconds to_ms(TimePoint tp) {
 }
 
 int main() {
-    unsigned number_of_nodes, number_of_connections, i;
-    std::cin >> number_of_nodes >> number_of_connections >> i >> i;
+    unsigned number_of_nodes, number_of_connections;
+    std::cin >> number_of_nodes >> number_of_connections;
 
     std::cout << number_of_nodes << "\n";
 
