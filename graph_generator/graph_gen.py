@@ -81,9 +81,6 @@ class Node:
         self.neighbours.append(i)
 
 
-# file_name = "../graphviz/graph.dot"
-# filename = "../1000n-0.15prob.in"
-
 if __name__ == '__main__':
     g = Graph()
 
@@ -104,5 +101,4 @@ if __name__ == '__main__':
     g.init()
     g.fill_graph()
     g.print_graphviz()
-    # g.print_graphviz()
     g.print()

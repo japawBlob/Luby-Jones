@@ -31,6 +31,19 @@ struct node {
 
         return s;
     }
+    std::string to_string (unsigned i) const {
+        std::string s = std::to_string(this->name);
+        s += " [style=\"filled\", color=\"";
+        s += colors::get_colour(this->colour) + "\"]\n";
+        s += std::to_string(this->name) + " -- {";
+        for ( auto n = this->neighbours.begin(); n <= this->neighbours.begin() + i; n++ ){
+            s += std::to_string(*n) + " ";
+        }
+
+        s += "}\n\n";
+
+        return s;
+    }
 };
 
 struct graph {
@@ -127,8 +140,8 @@ std::chrono::milliseconds to_ms(TimePoint tp) {
 int main() {
     graph g = graph();
     auto start = std::chrono::high_resolution_clock::now();
-    // g.colour_graph(); // 1721 ms
-    g.colour_graph_parallel(); // 500ms
+    g.colour_graph(); // 1721 ms
+    // g.colour_graph_parallel(); // 500ms
     auto end = std::chrono::high_resolution_clock::now();
     std::ofstream out("out.dot");
     // out.open("out.dot", "w+");
