@@ -1,11 +1,11 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <cstdlib>
 #include <atomic>
 #include <omp.h>
 #include <chrono>
-
-std::string colors [] =  {"blue", "red", "green", "yellow", "lightblue", "purple", "orange", "violet"};
+#include "colours.h"
 
 struct node {
     unsigned name;
@@ -22,7 +22,7 @@ struct node {
     std::string to_string () const {
         std::string s = std::to_string(this->name);
         s += " [style=\"filled\", color=\"";
-        s += colors[this->colour] + "\"]\n";
+        s += colors::get_colour(this->colour) + "\"]\n";
         s += std::to_string(this->name) + " -- {";
         for (const auto& n : this->neighbours){
             s += std::to_string(n) + " ";
@@ -34,7 +34,88 @@ struct node {
 };
 
 struct graph {
+    unsigned number_of_nodes, number_of_connections, number_of_colours;
     std::vector<node> nodes;
+
+    graph() : number_of_colours(0) {
+        load_nodes(std::cin);
+    }
+    graph(const std::string& filename) : number_of_colours(0){
+        std::fstream in (filename);
+        load_nodes(in);
+    }
+    void print_graphviz(std::ostream& out) const {
+        for (const auto& n : nodes) {
+            out << n.to_string();
+        }
+    }
+    void colour_graph(){
+        unsigned number_of_coloured_nodes = 0;
+        while (number_of_coloured_nodes < this->number_of_nodes){
+            std::vector<unsigned> to_be_colored;
+            for (const auto& n : this->nodes) {
+                if (n.colour != 0) continue;
+                bool local_max = true;
+                for (const auto& neighbour : n.neighbours){
+                    if (n.colour == 0 && this->nodes[neighbour].colour == 0 &&
+                        n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
+                        local_max = false;
+                        break;
+                    }
+                }
+                if (local_max) {
+                    to_be_colored.push_back(n.name);
+                    number_of_coloured_nodes++;
+                }
+            }
+            for (const auto n : to_be_colored) {
+                this->nodes[n].colour = this->number_of_colours;
+            }
+            this->number_of_colours++;
+        }
+    }
+    void colour_graph_parallel(){
+        std::atomic<unsigned> number_of_coloured_nodes(0);
+        while (number_of_coloured_nodes < this->number_of_nodes){
+            std::vector<unsigned> to_be_colored;
+#pragma omp parallel for
+            for (const auto& n : this->nodes) {
+                if (n.colour != 0) continue;
+                bool local_max = true;
+                for (const auto& neighbour : n.neighbours){
+                    if (n.colour == 0 && this->nodes[neighbour].colour == 0 &&
+                        n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
+                        local_max = false;
+                        break;
+                    }
+                }
+                if (local_max) {
+#pragma omp critical
+                    {
+                        to_be_colored.push_back(n.name);
+                    }
+                    number_of_coloured_nodes++;
+                }
+            }
+            for (const auto n : to_be_colored) {
+                this->nodes[n].colour = this->number_of_colours;
+            }
+            this->number_of_colours++;
+        }
+    }
+private:
+    void load_nodes(std::istream& in){
+        in >> this->number_of_nodes >> this->number_of_connections;
+        for (unsigned i = 0; i < this->number_of_nodes; i++){
+            this->nodes.emplace_back(i, rand());
+        }
+        for (unsigned i = 0; i < this->number_of_connections; i++){
+            unsigned from, to;
+            in >> from >> to;
+            this->nodes[from].neighbours.push_back(to);
+            this->nodes[to].neighbours.push_back(from);
+        }
+    }
 };
 
 
@@ -44,55 +125,15 @@ std::chrono::milliseconds to_ms(TimePoint tp) {
 }
 
 int main() {
-    unsigned number_of_nodes, number_of_connections;
-    std::cin >> number_of_nodes >> number_of_connections;
-
-    std::cout << number_of_nodes << "\n";
-
-    std::vector<node> nodes;
-    for (unsigned i = 0; i < number_of_nodes; i++){
-        nodes.emplace_back(i, rand());
-    }
-    for (unsigned i = 0; i < number_of_connections; i++){
-        unsigned from, to;
-        std::cin >> from >> to;
-        nodes[from].neighbours.push_back(to);
-        nodes[to].neighbours.push_back(from);
-    }
+    graph g = graph();
     auto start = std::chrono::high_resolution_clock::now();
-    std::atomic<unsigned> number_of_coloured_nodes(0);
-    unsigned colour = 1;
-    while (number_of_coloured_nodes < number_of_nodes){
-        std::vector<unsigned> to_be_colored;
-#pragma omp parallel for
-        for (auto& n : nodes) {
-            if (n.colour != 0) continue;
-            bool local_max = true;
-            for (const auto& neighbour : n.neighbours){
-                if (n.colour == 0 && nodes[neighbour].colour == 0 && n.random_id < nodes[neighbour].random_id){ // lze optimalizovat
-                    local_max = false;
-                    break;
-                }
-            }
-            if (local_max) {
-#pragma omp critical
-            {
-                to_be_colored.push_back(n.name);
-            }
-            number_of_coloured_nodes++;
-            }
-        }
-        for (auto n : to_be_colored) {
-            nodes[n].colour = colour;
-        }
-        colour++;
-    }
+    // g.colour_graph(); // 1721 ms
+    g.colour_graph_parallel(); // 500ms
     auto end = std::chrono::high_resolution_clock::now();
+    std::ofstream out("out.dot");
+    // out.open("out.dot", "w+");
+    g.print_graphviz(out);
     std::cout << "Needed " << to_ms(end - start).count() << " ms to finish.\n";
-    for (const auto& n : nodes) {
-        std::cout << n.to_string();
-    }
-
 
     return 0;
 }

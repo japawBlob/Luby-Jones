@@ -1,5 +1,7 @@
-out.png:
-	dot -Tpng graph.dot > out.png
+all: $(patsubst %.dot, %.png, $(wildcard *dot))
+
+%.png: %.dot
+	dot -Tpng $< > $@
 
 clean:
-	rm out.png
+	rm *.png
