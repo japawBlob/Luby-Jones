@@ -62,6 +62,12 @@ struct graph {
             out << n.to_string();
         }
     }
+    void clear_graph(){
+        for (auto & blob : this->nodes){
+            blob.colour = 0;
+        }
+        this->number_of_colours = 0;
+    }
     void colour_graph(){
         unsigned number_of_coloured_nodes = 0;
         while (number_of_coloured_nodes < this->number_of_nodes){
@@ -96,7 +102,7 @@ struct graph {
                 if (n.colour != 0) continue;
                 bool local_max = true;
                 for (const auto& neighbour : n.neighbours){
-                    if (n.colour == 0 && this->nodes[neighbour].colour == 0 &&
+                    if (this->nodes[neighbour].colour == 0 &&
                         n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
                         local_max = false;
                         break;
@@ -139,14 +145,32 @@ std::chrono::milliseconds to_ms(TimePoint tp) {
 
 int main() {
     graph g = graph();
-    auto start = std::chrono::high_resolution_clock::now();
-    g.colour_graph(); // 1721 ms
-    // g.colour_graph_parallel(); // 500ms
-    auto end = std::chrono::high_resolution_clock::now();
-    std::ofstream out("out.dot");
+
+    std::cout << "loading done" << std::endl;
+
+    size_t number_of_iterations = 1;
+    for (size_t i = 0; i< number_of_iterations; i++){
+        g.clear_graph();
+        auto parallel_start = std::chrono::high_resolution_clock::now();
+        g.colour_graph_parallel(); // 500ms
+        auto parallel_end = std::chrono::high_resolution_clock::now();
+        std::cout << "iteration number: " << i << "    Needed " << to_ms(parallel_end - parallel_start).count() << " ms to finish parallel.\n";
+    }
+    std::cout << "number of colours: " << g.number_of_colours << std::endl;
+    std::cout << std::endl;
+    for (size_t i = 0; i< number_of_iterations; i++){
+        g.clear_graph();
+        auto serial_start = std::chrono::high_resolution_clock::now();
+        g.colour_graph(); // 1721 ms
+        auto serial_end = std::chrono::high_resolution_clock::now();
+        std::cout << "iteration number: " << i << "    Needed " << to_ms(serial_end - serial_start).count() << " ms to finish serial.\n";
+    }
+    std::cout << "number of colours: " << g.number_of_colours << std::endl;
+
+
+    // std::ofstream out("out.dot");
     // out.open("out.dot", "w+");
-    g.print_graphviz(out);
-    std::cout << "Needed " << to_ms(end - start).count() << " ms to finish.\n";
+    // g.print_graphviz(out);
 
     return 0;
 }

@@ -1,5 +1,6 @@
+import copy
 import random
-
+import numpy as np
 # max number of edges = N*N/2 - N
 
 
@@ -12,6 +13,8 @@ class Graph:
         self.hubs = False
         self.number_of_hubs = 0
         self.hub_connection_probability = 0
+        self.prob_or_static = "x"
+        self.static_connections = 0
 
     def init(self):
         for n in range(self.number_of_nodes):
@@ -20,6 +23,12 @@ class Graph:
             self.nodes[i].hub = True
 
     def fill_graph(self):
+        if prob_or_static == "s":
+            self.static_fill_graph()
+        if prob_or_static == "p":
+            self.probability_fill_graph()
+
+    def probability_fill_graph(self):
         for i, node in enumerate(self.nodes):
             for j in range(i):
                 if node.hub or self.nodes[j].hub:
@@ -29,6 +38,26 @@ class Graph:
                 elif random.random() < self.connection_probability:
                     node.append(j)
                     self.number_of_edges += 1
+
+    def static_fill_graph(self):
+        # for i, node in enumerate(self.nodes):
+        #     for j in range(i):
+        #         if node.hub or self.nodes[j].hub:
+        #             if random.random() < self.hub_connection_probability:
+        #                 node.append(j)
+        #                 self.number_of_edges += 1
+        #         elif random.random() < self.connection_probability:
+        #             node.append(j)
+        #             self.number_of_edges += 1
+        # connectible_nodes = copy.deepcopy(self.nodes)
+        # for i, node in enumerate(connectible_nodes):
+        #     neighbours = np.random.choice(self.number_of_nodes, size=self.static_connections-len(node.neighbours), replace=False)
+        #     for neighbour in neighbours:
+        #         if neighbour == i:
+        #             continue
+        #         if self.nodes[neighbour]:
+        #         node.append(neighbour)
+        pass
 
     def print_graphviz(self, file=True):
         if file is False:
@@ -63,10 +92,17 @@ class Graph:
                         f.write(str(i) + " " + str(neighbour) + "\n")
 
     def create_filename(self, file_type):
-        ret = str(self.number_of_nodes) + "n-" + str(self.connection_probability) + "p"
-        if self.hubs:
-            ret += "-" + str(self.number_of_hubs) + "h-" + str(self.hub_connection_probability) + "hp"
-        ret += file_type
+        ret = ""
+        if self.prob_or_static == "p":
+            ret = str(self.number_of_nodes) + "n-" + str(self.connection_probability) + "p"
+            if self.hubs:
+                ret += "-" + str(self.number_of_hubs) + "h-" + str(self.hub_connection_probability) + "hp"
+            ret += file_type
+        if self.prob_or_static == "s":
+            ret = str(self.number_of_nodes) + "n-" + str(self.static_connections) + "s"
+            if self.hubs:
+                ret += "-" + str(self.number_of_hubs) + "h-" + str(self.hub_connection_probability) + "hp"
+            ret += file_type
         return ret
 
 class Node:
@@ -87,18 +123,29 @@ if __name__ == '__main__':
     print("This is basic program aimed to generate random graph")
 
     g.number_of_nodes = int(input("Enter number of nodes: "))
-    g.connection_probability = float(input("please enter probability of connection between two nodes. "
-                                   "Input value between 0 and 1.\n 1 for fully connected and 0 for null graph.: "))
-    g.hubs = input("Do you want to create hubs? [Y/n]: ")
-    # print(g.hubs)
-    if g.hubs == "Y" or g.hubs == "y":
-        g.hubs = True
-        g.number_of_hubs = int(input("enter number of hubs: "))
-        g.hub_connection_probability = float(input("please enter probability of hub connection: "))
+    prob_or_static = (input("Do you want to generate graph based on probability or static connections? \n"
+                            "Enter \"p\" for probability and \"s\" for static"))
+    if g.prob_or_static == "p" or g.prob_or_static == "P":
+        g.connection_probability = float(input("please enter probability of connection between two nodes. "
+                                       "Input value between 0 and 1.\n 1 for fully connected and 0 for null graph.: "))
+        g.hubs = input("Do you want to create hubs? [Y/n]: ")
+        # print(g.hubs)
+        if g.hubs == "Y" or g.hubs == "y":
+            g.hubs = True
+            g.number_of_hubs = int(input("enter number of hubs: "))
+            g.hub_connection_probability = float(input("please enter probability of hub connection: "))
+        else:
+            g.hubs = False
     else:
-        g.hubs = False
+        g.static_connections = float(input("please enter unsigned integer, that represents number of neighbours does each node have"))
 
+
+
+    print("initializing graph")
     g.init()
+    print("Filling graph")
     g.fill_graph()
+    print("Printing graphviz")
     g.print_graphviz()
+    print("Printing")
     g.print()
