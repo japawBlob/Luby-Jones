@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
                                             // of processes
   MPI_Comm_rank(MPI_COMM_WORLD, &myid);     // obtain process number
 
-  // int arr [] = {1, 1, 2, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 9, 1, 2, 1, 1};
+  //int arr [] = {1, 1, 2, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 4, 5, 1, 4, 5, 1, 2, 5, 1, 1, 1, 1, 1, 9};
   int arr [] = {1, 1, 2, 4, 1, 9, 1, 2, 1, 1};
 
   size_t arr_size = sizeof(arr)/sizeof(int);
@@ -29,30 +29,46 @@ int main(int argc, char *argv[])
   if (myid == 0) printf("arrsize: %d, chunk_size: %d, remainder: %d\n", arr_size, chunk_size, arr_size%numprocs);
 
   int * coloured_nodes = (int*)malloc(chunk_size*sizeof(int));
+  memset(coloured_nodes, 0, chunk_size*sizeof(int));
   int number_of_coloured_nodes = 0;
   int number_of_iterations = 0;
   for (int i = myid*(chunk_size); i < MIN(myid*chunk_size+chunk_size, arr_size); i++){
-    printf("I am %d, I am on %d iteration and my number is %d\n", myid, i, arr[i]);
+    // printf("I am %d, I am on %d iteration and my number is %d\n", myid, i, arr[i]);
     if(arr[i] < 3){
       coloured_nodes[number_of_coloured_nodes++] = i;
     }
     number_of_iterations++;
   }
+  for (int i = 0; i < chunk_size; i++){
+    printf("%d ", coloured_nodes[i]);
+  }
+  printf("\n");
   int * complete_data = (int*)malloc(arr_size*sizeof(int)+chunk_size*sizeof(int));
   int * counts_per_process = (int*)malloc(numprocs*sizeof(int)+sizeof(int));
-  counts_per_process[0] = 0;
-  MPI_Allgather(&number_of_coloured_nodes, 1, MPI_INT, &counts_per_process[1], 1, MPI_INT, MPI_COMM_WORLD);
+  MPI_Allgather(&number_of_coloured_nodes, 1, MPI_INT, counts_per_process, 1, MPI_INT, MPI_COMM_WORLD);
   printf("I am %d, I finished my work in %d iterations\n", myid, number_of_iterations);
   for (int i = 0; i < numprocs; i++){
     printf("%d ", counts_per_process[i]);
   }
-  for (int i = 1; i < numprocs+1; i++){
-    // counts_per_process[i] += counts_per_process[i-1];
-    counts_per_process[i] += 1;
-  }
   printf("\n");
-  //MPI_Allgatherv(coloured_nodes, chunk_size, MPI_INT, complete_data, chunk_size, counts_per_process, MPI_INT, MPI_COMM_WORLD);
+
   MPI_Allgather(coloured_nodes, chunk_size, MPI_INT, complete_data, chunk_size, MPI_INT, MPI_COMM_WORLD);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  for (int i = 0; i < numprocs; i++){
+    printf("%d ", counts_per_process[i]);
+  } printf("\n");
+  if (myid == 0){
+
+    for (int i = 0; i<numprocs; i+=1){
+      printf("Data from process: %d are    ",i);
+      for (int k = 0; k < counts_per_process[i]; k++){
+        printf("%d ",complete_data[i*chunk_size+k]);
+      }
+    }
+  }
+  
+  
 
   // do {
   //   if (myid == 0) {
