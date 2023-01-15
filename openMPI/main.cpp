@@ -2,20 +2,37 @@
 #include <fstream>
 #include <vector>
 #include <cstdlib>
-#include <atomic>
-#include <omp.h>
 #include <chrono>
+
+#ifndef INPUT_FILE
+    #define INPUT_FILE "../data_in/10n-0.2p-2h-0.5hp.in"
+#endif
+#if  defined(OPENMP) || defined(OPENMPI) || defined(THREAD)
+    #include <atomic>
+#endif
+
+#ifdef THREAD
+    #define THREAD_COUNT std::thread::hardware_concurrency()
+    #include <thread>
+    #include <mutex>
+#endif
+#if  defined(OPENMP) || defined(OPENMPI)
+    #include <omp.h>
+#endif
+#ifdef OPENMPI
+    #include "mpi.h"
+#endif
+
 #include "colours.h"
-#include "mpi.h"
 
 struct node {
     unsigned name;
-    unsigned colour;
+    int colour;
     unsigned random_id;
     std::vector<unsigned> neighbours;
 
     node() = default;
-    node(unsigned name, unsigned random_id) : name (name), colour(0), random_id(random_id)
+    node(unsigned name, unsigned random_id) : name (name), colour(-1), random_id(random_id)
     {};
     void print_n() const {
         std::cout << "name: " << name << "\nrand: "<< random_id << "\ncolour: " << colour << "\n\n";
@@ -37,8 +54,10 @@ struct node {
         s += " [style=\"filled\", color=\"";
         s += colors::get_colour(this->colour) + "\"]\n";
         s += std::to_string(this->name) + " -- {";
-        for ( auto n = this->neighbours.begin(); n <= this->neighbours.begin() + i; n++ ){
-            s += std::to_string(*n) + " ";
+        for (const auto& n : this->neighbours){
+            if (n > i){
+                s += std::to_string(n) + " ";
+            }
         }
 
         s += "}\n\n";
@@ -51,23 +70,58 @@ struct graph {
     unsigned number_of_nodes, number_of_connections, number_of_colours, chunk_size, myid, numprocs;
     std::vector<node> nodes;
 
+    graph() : number_of_colours(0) {
+        load_nodes(std::cin);
+#ifdef THREAD
+        this->to_be_colored_lock = new std::mutex();
+        this->chunk_size = (this->number_of_nodes+THREAD_COUNT-1) / THREAD_COUNT;
+#endif
+    }
+    graph(const std::string& filename) : number_of_colours(0){
+        std::fstream in (filename);
+        if( in.fail() ){
+            std::cerr << "File not found\n";
+        }
+        load_nodes(in);
+#ifdef THREAD
+        this->to_be_colored_lock = new std::mutex();
+        this->chunk_size = (this->number_of_nodes+THREAD_COUNT-1) / THREAD_COUNT;
+#endif
+    }
+
+#if defined (OPENMPI)
     graph(unsigned myid, unsigned numprocs) : number_of_colours(0), myid(myid), numprocs(numprocs) {
         load_nodes(std::cin);
         this->chunk_size = (number_of_nodes+numprocs-1)/numprocs;
     }
     graph(const std::string& filename, unsigned myid, unsigned numprocs) : number_of_colours(0), myid(myid), numprocs(numprocs){
         std::fstream in (filename);
+        if( in.fail() ){
+            std::cerr << "File not found\n";
+        }
         load_nodes(in);
         this->chunk_size = (number_of_nodes+numprocs-1)/numprocs;
     }
+#endif
+#ifdef THREAD
+    ~graph(){
+        delete this->to_be_colored_lock;
+    }
+#endif
+    void print_graphviz() const {
+        std::ofstream out("../graphviz/" + std::to_string(this->number_of_nodes) + "n.dot");
+        this->print_graphviz(out);
+    }
     void print_graphviz(std::ostream& out) const {
-        for (const auto& n : nodes) {
-            out << n.to_string();
+        out << "graph {\n";
+        for (size_t i = 0; i < nodes.size(); i++){
+            out << nodes[i].to_string(i);
         }
+        out << "}";
     }
     void clear_graph(){
         for (auto & blob : this->nodes){
-            blob.colour = 0;
+            blob.colour = -1;
         }
         this->number_of_colours = 0;
     }
@@ -76,11 +130,10 @@ struct graph {
         while (number_of_coloured_nodes < this->number_of_nodes){
             std::vector<unsigned> to_be_colored;
             for (const auto& n : this->nodes) {
-                if (n.colour != 0) continue;
+                if (n.colour != -1) continue;
                 bool local_max = true;
                 for (const auto& neighbour : n.neighbours){
-                    if (n.colour == 0 && this->nodes[neighbour].colour == 0 &&
-                        n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
+                    if (this->nodes[neighbour].colour == -1 && n.random_id < this->nodes[neighbour].random_id){
                         local_max = false;
                         break;
                     }
@@ -96,17 +149,38 @@ struct graph {
             this->number_of_colours++;
         }
     }
-    void colour_graph_parallel(){
+#ifdef THREAD
+    void colour_graph_parallel() {
+        std::atomic<unsigned> number_of_coloured_nodes(0);
+        while (number_of_coloured_nodes < this->number_of_nodes) {
+            std::vector<unsigned> to_be_colored;
+
+            std::vector<std::thread> threads;
+            for (unsigned i = 0; i < THREAD_COUNT; i++) {
+                threads.emplace_back(&graph::colour_graph_compute_parallel, this, std::ref(number_of_coloured_nodes),
+                                     std::ref(to_be_colored), i);
+            }
+            for (auto &thread: threads) {
+                thread.join();
+            }
+            for (const auto n: to_be_colored) {
+                this->nodes[n].colour = this->number_of_colours;
+            }
+            this->number_of_colours++;
+        }
+    }
+#endif
+#ifdef OPENMP
+    void colour_graph_parallel_openMP(){
         std::atomic<unsigned> number_of_coloured_nodes(0);
         while (number_of_coloured_nodes < this->number_of_nodes){
             std::vector<unsigned> to_be_colored;
 #pragma omp parallel for
             for (const auto& n : this->nodes) {
-                if (n.colour != 0) continue;
+                if (n.colour != -1) continue;
                 bool local_max = true;
                 for (const auto& neighbour : n.neighbours){
-                    if (this->nodes[neighbour].colour == 0 &&
-                        n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
+                    if (this->nodes[neighbour].colour == -1 && n.random_id < this->nodes[neighbour].random_id){
                         local_max = false;
                         break;
                     }
@@ -125,18 +199,19 @@ struct graph {
             this->number_of_colours++;
         }
     }
+#endif
+#ifdef OPENMPI
     void colour_graph_parallel_mpi(){
         std::atomic<unsigned> number_of_coloured_nodes(0);
         while (number_of_coloured_nodes < this->number_of_nodes){
-            std::vector<unsigned> to_be_colored(chunk_size);
+            std::vector<unsigned> to_be_colored;
 #pragma omp parallel for
             for (unsigned i = myid*(chunk_size); i < std::min(myid*chunk_size+chunk_size, number_of_nodes); i++) {
                 const auto & n = this->nodes[i];
-                if (n.colour != 0) continue;
+                if (n.colour != -1) continue;
                 bool local_max = true;
                 for (const auto& neighbour : n.neighbours){
-                    if (this->nodes[neighbour].colour == 0 &&
-                        n.random_id < this->nodes[neighbour].random_id){ // lze optimalizovat
+                    if (this->nodes[neighbour].colour == -1 && n.random_id < this->nodes[neighbour].random_id){
                         local_max = false;
                         break;
                     }
@@ -146,28 +221,51 @@ struct graph {
                     {
                         to_be_colored.push_back(n.name);
                     }
-                    number_of_coloured_nodes++;
                 }
             }
-            unsigned temp = number_of_coloured_nodes;
+            unsigned temp = to_be_colored.size();
+            to_be_colored.resize(chunk_size);
             unsigned * complete_data = (unsigned*)malloc(number_of_nodes*sizeof(unsigned)+chunk_size*sizeof(unsigned));
-            unsigned * counts_per_process = (unsigned*)malloc(numprocs*sizeof(unsigned)+sizeof(unsigned));
-            MPI_Allgather(&temp, 1, MPI_UNSIGNED, counts_per_process, 1, MPI_UNSIGNED, MPI_COMM_WORLD);
+            unsigned * coloured_per_process = (unsigned*)malloc(numprocs*sizeof(unsigned)+sizeof(unsigned));
+            MPI_Allgather(&temp, 1, MPI_UNSIGNED, coloured_per_process, 1, MPI_UNSIGNED, MPI_COMM_WORLD);
             MPI_Allgather(&to_be_colored[0], chunk_size, MPI_UNSIGNED, complete_data, chunk_size, MPI_UNSIGNED, MPI_COMM_WORLD);
-            for (int i = 0; i<numprocs; i+=1){
-                for (int k = 0; k < counts_per_process[i]; k++){
+            for (unsigned i = 0; i<numprocs; i+=1){
+                for (unsigned k = 0; k < coloured_per_process[i]; k++){
                     this->nodes[complete_data[i*chunk_size+k]].colour = this->number_of_colours;
                 }
             }
-            /// TODO SUM ALL NUMBERS OF COLOURED NODES
-
-            // for (const auto n : to_be_colored) {
-            //     this->nodes[n].colour = this->number_of_colours;
-            // }
+            for (unsigned i = 0; i < numprocs; i++){
+                number_of_coloured_nodes += coloured_per_process[i];
+            }
             this->number_of_colours++;
+            free(complete_data);
+            free(coloured_per_process);
         }
-    }    
+    }
+#endif
 private:
+#ifdef THREAD
+    std::mutex * to_be_colored_lock;
+    void colour_graph_compute_parallel(std::atomic<unsigned> & number_of_coloured_nodes, std::vector<unsigned> & to_be_colored, unsigned id){
+        for (unsigned i = id*(this->chunk_size); i < std::min(id*this->chunk_size+this->chunk_size, this->number_of_nodes); i++) {
+            node & n = this->nodes[i];
+            if (n.colour != -1) continue;
+            bool local_max = true;
+            for (const auto& neighbour : n.neighbours){
+                if (this->nodes[neighbour].colour == -1 && n.random_id < this->nodes[neighbour].random_id){
+                    local_max = false;
+                    break;
+                }
+            }
+            if (local_max) {
+                this->to_be_colored_lock->lock();
+                to_be_colored.push_back(n.name);
+                this->to_be_colored_lock->unlock();
+                number_of_coloured_nodes++;
+            }
+        }
+    }
+#endif
     void load_nodes(std::istream& in){
         in >> this->number_of_nodes >> this->number_of_connections;
         for (unsigned i = 0; i < this->number_of_nodes; i++){
@@ -189,49 +287,66 @@ std::chrono::milliseconds to_ms(TimePoint tp) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef OPENMPI
     int myid, numprocs;
-
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &numprocs); // obtain number
-                                            // of processes
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);     // obtain process number
-
-    graph g = graph("10n-0.5p.in", myid, numprocs);
-
+    MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    graph g = graph(INPUT_FILE, myid, numprocs);
+    if (myid == 0) std::cout << "loading done" << std::endl;
+#else
+    graph g = graph(INPUT_FILE);
     std::cout << "loading done" << std::endl;
-
-    size_t number_of_iterations = 1;
+#endif
+    size_t number_of_iterations = 5;
+#ifdef OPENMP
     for (size_t i = 0; i< number_of_iterations; i++){
         g.clear_graph();
-        auto parallel_start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel(); // 500ms
-        auto parallel_end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(parallel_end - parallel_start).count() << " ms to finish parallel.\n";
+        auto start = std::chrono::high_resolution_clock::now();
+        g.colour_graph_parallel_openMP();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish openMP.\n";
     }
     std::cout << "number of colours: " << g.number_of_colours << std::endl;
     std::cout << std::endl;
+#elif defined(OPENMPI)
     for (size_t i = 0; i< number_of_iterations; i++){
         g.clear_graph();
-        auto serial_start = std::chrono::high_resolution_clock::now();
-        g.colour_graph(); // 1721 ms
-        auto serial_end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(serial_end - serial_start).count() << " ms to finish serial.\n";
+        auto start = std::chrono::high_resolution_clock::now();
+        g.colour_graph_parallel_mpi();
+        auto end = std::chrono::high_resolution_clock::now();
+        if(myid == 0){
+            std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish mpi.\n";
+        }
+    }
+    if(myid == 0){
+        std::cout << "number of colours: " << g.number_of_colours << std::endl;
+        std::cout << std::endl;
+    }
+#elif defined(THREAD)
+    for (size_t i = 0; i< number_of_iterations; i++){
+        g.clear_graph();
+        auto start = std::chrono::high_resolution_clock::now();
+        g.colour_graph_parallel();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish parallel.\n";
     }
     std::cout << "number of colours: " << g.number_of_colours << std::endl;
     std::cout << std::endl;
+#else
     for (size_t i = 0; i< number_of_iterations; i++){
         g.clear_graph();
-        auto serial_start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel_mpi(); // 1721 ms
-        auto serial_end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(serial_end - serial_start).count() << " ms to finish mpi.\n";
+        auto start = std::chrono::high_resolution_clock::now();
+        g.colour_graph();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish serial.\n";
     }
     std::cout << "number of colours: " << g.number_of_colours << std::endl;
+    std::cout << std::endl;
+#endif
 
-
-    // std::ofstream out("out.dot");
-    // out.open("out.dot", "w+");
-    // g.print_graphviz(out);
+#ifdef OPENMPI
     MPI_Finalize();
+#endif
     return 0;
 }

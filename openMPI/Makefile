@@ -1,36 +1,42 @@
-#CC=mpicc # use this variantfor C language programs only
-CC=mpiCC  # use variant for C++ programs to ensure linking with C++ libraries
-CXX=mpiCC
-#CC=arm-linux-gnueabihf-gcc
-CFLAGS += -g -std=c99 -pedantic -Wall
-CXXFLAGS += -g -std=gnu++11 -pedantic -Wall
-#LDFLAGS += -lrt -lpthread
+#cc=gcc
+CC=g++
+mpi=mpiCC
 
-CFLAGS += -fopenmp
-CXXFLAGS += -fopenmp
-LDFLAGS += -fopenmp
+COMPILE_FLAGS= -O3 -std=c++14 -Wall -pipe -g -march=native
+PTHREAD= -pthread
+OPENMP= -fopenmp
 
-CFLAGS += -lmpi
-CXXFLAGS += -lmpi
-LDFLAGS += -lmpi
+thread_flags=-DPTHREAD
+openMP_flags=-DOPENMP
+openMPI_flags=-DOPENMPI
 
-all: main
+PROGRAM_FILES=main.cpp
+INPUT_FILE= -D'INPUT_FILE="../data_in/10000n-0.995p.in"'
 
-main: main.o
+all: serial parallel openMP openMPI
 
-.PHONY : depend dep all run
+serial: main.cpp
+	$(CC) $(COMPILE_FLAGS) $(PROGRAM_FILES) $(INPUT_FILE) -o serial
 
-run: main
-	OMP_NUM_THREADS=4 mpirun --host localhost,localhost,localhost -np 3 -x OMP_NUM_THREADS ./main
+parallel: main.cpp
+	$(CC) $(COMPILE_FLAGS) $(thread_flags) $(PTHREAD) $(PROGRAM_FILES) $(INPUT_FILE) -o parallel
 
-dep:
-	$(CC) $(CFLAGS) $(CPPFLAGS) -w -E -M *.[Cc] \
-	  > depend
+openMP: main.cpp
+	$(CC) $(COMPILE_FLAGS) $(openMP_flags) $(PTHREAD) $(OPENMP) $(PROGRAM_FILES) $(INPUT_FILE) -o openMP
 
-depend:
-	@touch depend
+openMPI: main.cpp
+	$(mpi) $(COMPILE_FLAGS) $(openMPI_flags) $(PROGRAM_FILES) $(PTHREAD) $(OPENMP) $(INPUT_FILE) -o openMPI
+
+run: all run_all
+
+run_all:
+	./serial
+	./parallel
+	./openMP
+	OMP_NUM_THREADS=2 mpirun --host localhost,localhost,localhost,localhost -np 4 -x OMP_NUM_THREADS ./openMPI
+
+run_MPI:
+	OMP_NUM_THREADS=2 mpirun --host localhost,localhost,localhost,localhost -np 4 -x OMP_NUM_THREADS ./openMPI
 
 clean:
-	rm -f *.o *.a main depend
-
--include depend
+	rm serial parallel openMP openMPI

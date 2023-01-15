@@ -4,6 +4,8 @@ This repository is result of my work on Luby Jones algorythm, and it's paralleli
 
 This repository also contains graph generator written in python, that can be used to generate your own graphs.
 
+
+
 ### Recorded results: 
 For input 10000n-0.995p.in
 ```

@@ -137,9 +137,9 @@ if __name__ == '__main__':
         else:
             g.hubs = False
     else:
-        g.static_connections = float(input("please enter unsigned integer, that represents number of neighbours does each node have"))
-
-
+        print("NOT IMPLEMENTED YET")
+        exit()
+        # g.static_connections = float(input("please enter unsigned integer, that represents number of neighbours does each node have"))
 
     print("initializing graph")
     g.init()

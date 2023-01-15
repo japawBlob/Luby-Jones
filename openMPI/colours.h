@@ -9,7 +9,7 @@ namespace colors {
             return "";
         }
         return list[index];
-    };
+    }
 
 }
 
