@@ -70,6 +70,7 @@ iteration number: 1    Needed 5514 ms to finish OpenMPI.
 iteration number: 2    Needed 5518 ms to finish OpenMPI.
 iteration number: 3    Needed 5534 ms to finish OpenMPI.
 iteration number: 4    Needed 5516 ms to finish OpenMPI.
+Average time needed for OpenMPI compute: 5518ms. Number of colours: 5365
 ```
 
 ### std::thread
