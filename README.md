@@ -30,7 +30,7 @@ Makefile.
 ### Measurements:
 Measurement were executed on commit b85d080.
 Hardware: i7-4770 - 4 cores 8 threads. OS: Kubuntu 22.04.1 LTS x86_64.
-
+Measurements were done on file located in /data_in/30000n-0.0015p-10h-0.02hp.in
 Serial:
 ```
 iteration number: 0    Needed 314 ms to finish Serial.
