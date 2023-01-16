@@ -4,6 +4,13 @@ This repository is result of my work on Luby Jones algorythm, and it's paralleli
 For basic functionality with serial computation and basic threaded implementation use this folder and use included
 cmake in order to run the program.
 
+## What is Luby Jones Algorithm?
+
+Luby-Jones is based on Luby's algorithm, which is used for finding Maximal independent set. Luby-Jones is based on
+principle of finding independent sets, and iteratively colours graph.
+
+## How to use this program?
+
 Program accepts following arguments:
 - ```-f [file_path]```, where file_path is input file. If left empty input will be taken from std::in. 
 Input data has the following format: On first line are two unsigned integers A, B. Where A represents number of nodes and B 
@@ -14,11 +21,38 @@ connected nodes. For inspiration look into graph_generator and data_in folders.
 
 Comprehensive parallelization implemented in openMPI folder.
 
-This repository also contains graph generator written in python, that can be used to generate your own graphs.
+This repository also contains graph generator written in python, that can be used to generate your own graphs. It is
+located in graph_generator folder with its own readme.
 
+After completing, program also generates .dot file in graphviz folder, which can be compiled to .png file using included
+Makefile.
 
+### Measurements:
+Measurement were executed on commit b85d080.
+Hardware: i7-4770 - 4 cores 8 threads. OS: Kubuntu 22.04.1 LTS x86_64.
 
-### Recorded results: 
+Serial:
+```
+iteration number: 0    Needed 314 ms to finish Serial.
+iteration number: 1    Needed 326 ms to finish Serial.
+iteration number: 2    Needed 308 ms to finish Serial.
+iteration number: 3    Needed 310 ms to finish Serial.
+iteration number: 4    Needed 311 ms to finish Serial.
+Average time needed for Serial compute: 313ms. Number of colours: 120
+```
+
+Parallel:
+```
+iteration number: 0    Needed 86 ms to finish Parallel.
+iteration number: 1    Needed 84 ms to finish Parallel.
+iteration number: 2    Needed 86 ms to finish Parallel.
+iteration number: 3    Needed 84 ms to finish Parallel.
+iteration number: 4    Needed 83 ms to finish Parallel.
+Average time needed for Parallel compute: 84ms. Number of colours: 120
+```
+
+### Other recorded results: 
+Executed on Ryzen R3 PRO 5450U, in WSL2, OS: Ubuntu 20.04.5 LTS on Windows 10 x86_64
 For input 10000n-0.995p.in
 ```
 iteration number: 0    Needed 4933 ms to finish parallel.
