@@ -3,14 +3,34 @@
 #include <vector>
 #include <cstdlib>
 #include <atomic>
-#include <omp.h>
 #include <chrono>
 #include "colours.h"
 #include <thread>
 #include <mutex>
 
-#define THREAD_COUNT 1 //std::thread::hardware_concurrency()
+#define THREAD_COUNT std::thread::hardware_concurrency()
 
+enum class Mode {
+    Serial, Parallel
+};
+
+static std::string print_mode (Mode m){
+    switch(m){
+        case (Mode::Serial):
+        {
+            return "Serial";
+        }
+        case (Mode::Parallel): {
+            return "Parallel";
+        }
+    }
+    return "";
+}
+
+template <typename TimePoint>
+std::chrono::milliseconds to_ms(TimePoint tp) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(tp);
+}
 
 struct node {
     unsigned name;
@@ -82,6 +102,33 @@ struct graph {
         }
         out << "}";
     }
+    void compute(unsigned number_of_iterations, Mode m){
+        unsigned total_time = 0;
+        for (size_t i = 0; i< number_of_iterations; i++){
+            this->clear_graph();
+            auto start = std::chrono::high_resolution_clock::now();
+            switch (m) {
+                case(Mode::Serial): {
+                    this->colour_graph();
+                    break;
+                }
+                case(Mode::Parallel): {
+                    this->colour_graph_parallel();
+                    break;
+                }
+                default:
+                {
+                    std::cerr << "Mode not supported\n";
+                }
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            total_time += to_ms(end - start).count();
+            std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish " << print_mode(m) << ".\n";
+        }
+        std::cout << "Average time needed for "<< print_mode(m) <<" compute: " << total_time/number_of_iterations <<"ms. Number of colours: " << this->number_of_colours << std::endl;
+        std::cout << std::endl;
+    }
+
     void clear_graph(){
         for (auto & blob : this->nodes){
             blob.colour = -1;
@@ -165,34 +212,15 @@ private:
     }
 };
 
-template <typename TimePoint>
-std::chrono::milliseconds to_ms(TimePoint tp) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(tp);
-}
-
 int main() {
     graph g = graph("../data_in/30000n-0.0015p-10h-0.02hp.in");
 
-    std::cout << "loading done" << std::endl;
+    std::cout << "loading done " << std::endl;
 
     size_t number_of_iterations = 5;
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto parallel_start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel(); // 500ms
-        auto parallel_end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(parallel_end - parallel_start).count() << " ms to finish parallel.\n";
-    }
-    std::cout << "number of colours: " << g.number_of_colours << std::endl; ///TODO ADD AVERAGE VALUES
-    std::cout << std::endl;
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto serial_start = std::chrono::high_resolution_clock::now();
-        g.colour_graph(); // 1721 ms
-        auto serial_end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(serial_end - serial_start).count() << " ms to finish serial.\n";
-    }
-    std::cout << "number of colours: " << g.number_of_colours << std::endl;
+
+    g.compute(number_of_iterations, Mode::Serial);
+    g.compute(number_of_iterations, Mode::Parallel);
 
     g.print_graphviz();
 
