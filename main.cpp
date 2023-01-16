@@ -86,8 +86,12 @@ struct graph {
         this->chunk_size = (this->number_of_nodes+THREAD_COUNT-1) / THREAD_COUNT;
     }
     graph(const std::string& filename) : number_of_colours(0){
-        std::fstream in (filename);
-        load_nodes(in);
+        if (filename.empty()) {
+            load_nodes(std::cin);
+        } else {
+            std::fstream in (filename);
+            load_nodes(in);
+        }
         std::cout << "loading done\n";
         this->to_be_colored_lock = new std::mutex();
         this->chunk_size = (this->number_of_nodes+THREAD_COUNT-1) / THREAD_COUNT;
@@ -259,7 +263,8 @@ arguments handle_arguments(int argc, char *argv[]){
             }
             default:
             {
-                std::cerr << "flag \'" << opt << "\' not supported\n";
+                std::cerr << "flag not supported\n";
+                exit(-1);
             }
         }
     }
@@ -268,12 +273,7 @@ arguments handle_arguments(int argc, char *argv[]){
 
 int main(int argc, char *argv[]) {
     arguments args = handle_arguments(argc, argv);
-    graph g;
-    if(args.file_name.empty()){
-        g = graph();
-    } else {
-        g = graph(args.file_name);
-    }
+    graph g = graph(args.file_name);
 
     g.compute(args.number_of_iterations, args.mode);
 
