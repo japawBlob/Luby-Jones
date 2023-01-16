@@ -25,6 +25,23 @@
 
 #include "colours.h"
 
+static std::string mode () {
+#ifdef THREAD
+    return "std::thread";
+#elif defined(OPENMP)
+    return "OpenMP";
+#elif defined(OPENMPI)
+    return "OpenMPI";
+#else
+    return "Serial";
+#endif
+}
+
+template <typename TimePoint>
+std::chrono::milliseconds to_ms(TimePoint tp) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(tp);
+}
+
 struct node {
     unsigned name;
     int colour;
@@ -118,6 +135,35 @@ struct graph {
             out << nodes[i].to_string(i);
         }
         out << "}";
+    }
+    void compute(unsigned number_of_iterations){
+        if (this->number_of_nodes == 0){
+            return ;
+        }
+        unsigned total_time = 0;
+        for (size_t i = 0; i< number_of_iterations; i++){
+            this->clear_graph();
+            auto start = std::chrono::high_resolution_clock::now();
+#ifdef THREAD
+            this->colour_graph_parallel();
+#elif defined(OPENMP)
+            this->colour_graph_parallel_openMP();
+#elif defined(OPENMPI)
+            this->colour_graph_parallel_mpi();
+#else
+            this->colour_graph();
+#endif
+            auto end = std::chrono::high_resolution_clock::now();
+            total_time += to_ms(end - start).count();
+#ifdef OPENMPI
+            if( this->myid == 0)
+#endif
+            std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish " << mode() << ".\n";
+        }
+#ifdef OPENMPI
+        if( this->myid == 0)
+#endif
+        std::cout << "Average time needed for "<< mode() <<" compute: " << total_time/number_of_iterations <<"ms. Number of colours: " << this->number_of_colours << "\n\n";
     }
     void clear_graph(){
         for (auto & blob : this->nodes){
@@ -281,69 +327,26 @@ private:
 };
 
 
-template <typename TimePoint>
-std::chrono::milliseconds to_ms(TimePoint tp) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(tp);
-}
-
 int main(int argc, char *argv[]) {
+    std::string input_file;
+    if(argc > 1){
+        input_file = argv[1];
+    } else {
+        input_file = INPUT_FILE;
+    }
 #ifdef OPENMPI
     int myid, numprocs;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-    graph g = graph(INPUT_FILE, myid, numprocs);
+    graph g = graph(input_file, myid, numprocs);
     if (myid == 0) std::cout << "loading done" << std::endl;
 #else
-    graph g = graph(INPUT_FILE);
+    graph g = graph(input_file);
     std::cout << "loading done" << std::endl;
 #endif
     size_t number_of_iterations = 5;
-#ifdef OPENMP
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel_openMP();
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish openMP.\n";
-    }
-    std::cout << "number of colours: " << g.number_of_colours << std::endl;
-    std::cout << std::endl;
-#elif defined(OPENMPI)
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel_mpi();
-        auto end = std::chrono::high_resolution_clock::now();
-        if(myid == 0){
-            std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish mpi.\n";
-        }
-    }
-    if(myid == 0){
-        std::cout << "number of colours: " << g.number_of_colours << std::endl;
-        std::cout << std::endl;
-    }
-#elif defined(THREAD)
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto start = std::chrono::high_resolution_clock::now();
-        g.colour_graph_parallel();
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish parallel.\n";
-    }
-    std::cout << "number of colours: " << g.number_of_colours << std::endl;
-    std::cout << std::endl;
-#else
-    for (size_t i = 0; i< number_of_iterations; i++){
-        g.clear_graph();
-        auto start = std::chrono::high_resolution_clock::now();
-        g.colour_graph();
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "iteration number: " << i << "    Needed " << to_ms(end - start).count() << " ms to finish serial.\n";
-    }
-    std::cout << "number of colours: " << g.number_of_colours << std::endl;
-    std::cout << std::endl;
-#endif
+    g.compute(number_of_iterations);
 
 #ifdef OPENMPI
     MPI_Finalize();

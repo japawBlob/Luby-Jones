@@ -6,7 +6,7 @@ COMPILE_FLAGS= -O3 -std=c++14 -Wall -pipe -g -march=native
 PTHREAD= -pthread
 OPENMP= -fopenmp
 
-thread_flags=-DPTHREAD
+thread_flags=-DTHREAD
 openMP_flags=-DOPENMP
 openMPI_flags=-DOPENMPI
 

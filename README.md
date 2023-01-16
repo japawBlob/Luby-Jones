@@ -1,6 +1,18 @@
 # Luby Jones Algorytm
 
 This repository is result of my work on Luby Jones algorythm, and it's parallelization.
+For basic functionality with serial computation and basic threaded implementation use this folder and use included
+cmake in order to run the program.
+
+Program accepts following arguments:
+- ```-f [file_path]```, where file_path is input file. If left empty input will be taken from std::in. 
+Input data has the following format: On first line are two unsigned integers A, B. Where A represents number of nodes and B 
+represents number of edges. This line is followed by B lines, consisting of two unsigned integers C D, where C and D are
+connected nodes. For inspiration look into graph_generator and data_in folders.
+- ```-i [number_of_iterations]``` number of times the computation will be executed.
+- ```-p``` if this flag is enabled, program will run in parallel. Without this flag program runs in single threaded mode.
+
+Comprehensive parallelization implemented in openMPI folder.
 
 This repository also contains graph generator written in python, that can be used to generate your own graphs.
 
@@ -49,6 +61,3 @@ iteration number: 2    Needed 61760 ms to finish serial.
 iteration number: 3    Needed 61515 ms to finish serial.
 iteration number: 4    Needed 62632 ms to finish serial.
 ```
-
-Jak vyřešit MPI?
-Posílat nakonec každé iterace které nody se obarvily, aby si jemmohli obarvit všichni.

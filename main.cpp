@@ -7,6 +7,8 @@
 #include "colours.h"
 #include <thread>
 #include <mutex>
+#include <unistd.h>
+#include <cstring>
 
 #define THREAD_COUNT std::thread::hardware_concurrency()
 
@@ -20,7 +22,8 @@ static std::string print_mode (Mode m){
         {
             return "Serial";
         }
-        case (Mode::Parallel): {
+        case (Mode::Parallel):
+        {
             return "Parallel";
         }
     }
@@ -85,6 +88,7 @@ struct graph {
     graph(const std::string& filename) : number_of_colours(0){
         std::fstream in (filename);
         load_nodes(in);
+        std::cout << "loading done\n";
         this->to_be_colored_lock = new std::mutex();
         this->chunk_size = (this->number_of_nodes+THREAD_COUNT-1) / THREAD_COUNT;
     }
@@ -92,7 +96,7 @@ struct graph {
         delete this->to_be_colored_lock;
     }
     void print_graphviz() const {
-        std::ofstream out("../graphviz/" + std::to_string(this->number_of_nodes) + "n.dot");
+        std::ofstream out("../graphviz/coloured-" + std::to_string(this->number_of_nodes) + "n.dot");
         this->print_graphviz(out);
     }
     void print_graphviz(std::ostream& out) const {
@@ -212,17 +216,67 @@ private:
     }
 };
 
-int main() {
-    graph g = graph("../data_in/30000n-0.0015p-10h-0.02hp.in");
+struct arguments{
+    std::string file_name;
+    Mode mode;
+    unsigned number_of_iterations;
 
-    std::cout << "loading done " << std::endl;
+    arguments() : mode(Mode::Serial), number_of_iterations(5)
+    {};
+};
 
-    size_t number_of_iterations = 5;
+arguments handle_arguments(int argc, char *argv[]){
+    if (argc < 2){
+        return {};
+    }
+    if ( strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0 ){
+        std::cout << "This is basic program which implements Luby_Jones algorithm. For more advanced approach look into openMPI folder"
+                     "\nProgram supports following flags\n"
+                     "\t-f [file_name] to specify path to input file. Default is accepting input from std::in.\n"
+                     "\t-p to enable parallel computation. Default is computation in serial\n"
+                     "\t-i [number_of_iterations] to specify how many times the computation should be executed. Default number is 5\n";
+        exit(0);
+    }
+    arguments a;
+    int opt;
+    while((opt = getopt(argc, argv, ":f:pi:")) != -1)
+    {
+        switch (opt) {
+            case('f'):
+            {
+                a.file_name = optarg;
+                break;
+            }
+            case('p'):
+            {
+                a.mode = Mode::Parallel;
+                break;
+            }
+            case('i'):
+            {
+                a.number_of_iterations = atoi(optarg);
+                break;
+            }
+            default:
+            {
+                std::cerr << "flag \'" << opt << "\' not supported\n";
+            }
+        }
+    }
+    return a;
+}
 
-    g.compute(number_of_iterations, Mode::Serial);
-    g.compute(number_of_iterations, Mode::Parallel);
+int main(int argc, char *argv[]) {
+    arguments args = handle_arguments(argc, argv);
+    graph g;
+    if(args.file_name.empty()){
+        g = graph();
+    } else {
+        g = graph(args.file_name);
+    }
+
+    g.compute(args.number_of_iterations, args.mode);
 
     g.print_graphviz();
-
     return 0;
 }
